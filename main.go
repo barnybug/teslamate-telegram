@@ -166,15 +166,20 @@ func efficiency(start, end CarState) float32 {
 	return kwh * 1000 / (end.odometer - start.odometer) * KMPerMile // Wh/mi
 }
 
-func main() {
-	opts := mqtt.NewClientOptions().AddBroker("tcp://mqtt:1883")
-	client := mqtt.NewClient(opts)
-	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		panic(token.Error())
-	}
-	carUpdates := make(chan *Car, 1)
+func clientOptions() *mqtt.ClientOptions {
+	hostname, _ := os.Hostname()
+	clientID := fmt.Sprintf("teslamate-telegram-%s", hostname)
+	opts := mqtt.NewClientOptions()
+	opts.AddBroker("tcp://mqtt:1883")
+	opts.SetClientID(clientID)  // set unique client id
+	opts.SetAutoReconnect(true) // auto reconnect (default)
+	opts.SetCleanSession(false) // server will queue messages whilst client is offline
+	return opts
+}
 
+func main() {
 	// discover cars
+	carUpdates := make(chan *Car, 1)
 	var defaultCar int
 	cars := map[int]*Car{}
 	carHandler := func(client mqtt.Client, msg mqtt.Message) {
@@ -204,7 +209,15 @@ func main() {
 		car.Update(key, string(msg.Payload()))
 		car.update.Reset(time.Second)
 	}
-	if token := client.Subscribe("teslamate/cars/#", 0, carHandler); token.Wait() && token.Error() != nil {
+
+	opts := clientOptions()
+	opts.SetOnConnectHandler(func(client mqtt.Client) {
+		if token := client.Subscribe("teslamate/cars/#", 0, carHandler); token.Wait() && token.Error() != nil {
+			panic(token.Error())
+		}
+	})
+	client := mqtt.NewClient(opts)
+	if token := client.Connect(); token.Wait() && token.Error() != nil {
 		panic(token.Error())
 	}
 	log.Println("Connected to mqtt")
