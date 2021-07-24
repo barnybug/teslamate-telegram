@@ -15,6 +15,10 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
+// 61% 334.87km 73.5 kWh usuable
+const RatedKMPerKwh = 7.47
+const KMPerMile = 1.61
+
 type CarState struct {
 	at                   time.Time
 	geofence             string
@@ -157,6 +161,11 @@ func driveShiftState(s string) bool {
 	return s == "D" || s == "R"
 }
 
+func efficiency(start, end CarState) float32 {
+	kwh := (start.ratedBatteryRangeKm - end.ratedBatteryRangeKm) / RatedKMPerKwh
+	return kwh * 1000 / (end.odometer - start.odometer) * KMPerMile // Wh/mi
+}
+
 func main() {
 	opts := mqtt.NewClientOptions().AddBroker("tcp://mqtt:1883")
 	client := mqtt.NewClient(opts)
@@ -274,8 +283,6 @@ func main() {
 	}
 }
 
-const KM_IN_MILE = 1.61
-
 func formatDuration(d time.Duration) string {
 	u := uint64(d.Round(time.Minute)) / uint64(time.Minute)
 	if u < 60 {
@@ -292,31 +299,32 @@ func finishChargingMessage(start, end, peak CarState) string {
 	}
 	duration := end.at.Sub(start.at)
 	averagePower := float64(end.chargeEnergyAdded-start.chargeEnergyAdded) / duration.Hours()
-	milesAdded := (end.ratedBatteryRangeKm - start.ratedBatteryRangeKm) / KM_IN_MILE
-	text := fmt.Sprintf("🔌 Charging finished.\n🕗 %s→%s (%s)\n🔋 %d→%d%% (+ %d%%)\n🚗 %0.f→%.0f miles (+ %.1f miles).\n⚡ + %.1fkWh\nAverage Power: %.2fkW (Peak %dkW at %d%%)",
+	milesAdded := (end.ratedBatteryRangeKm - start.ratedBatteryRangeKm) / KMPerMile
+	text := fmt.Sprintf("🔌 Charging finished at %s.\n🕗 %s→%s (%s)\n🔋 %d→%d%% (+ %d%%)\n🚗 %0.f→%.0f miles (+ %.1f miles).\n⚡ + %.1fkWh\nAverage Power: %.2fkW (Peak %dkW at %d%%)",
+		start.placeName(),
 		start.at.Format("15:04"), end.at.Format("15:04"), formatDuration(duration),
 		start.batteryLevel, end.batteryLevel, battery,
-		start.ratedBatteryRangeKm/KM_IN_MILE, end.ratedBatteryRangeKm/KM_IN_MILE, milesAdded,
+		start.ratedBatteryRangeKm/KMPerMile, end.ratedBatteryRangeKm/KMPerMile, milesAdded,
 		end.chargeEnergyAdded, averagePower, peak.chargerPower, peak.batteryLevel)
 	return text
 }
 
 func finishDriveMessage(start, end CarState) string {
-	distance := (end.odometer - start.odometer) / KM_IN_MILE
+	distance := (end.odometer - start.odometer) / KMPerMile
 	if distance < 0.1 {
 		return ""
 	}
 	battery := end.batteryLevel - start.batteryLevel
-	// kwh := (start.batteryRange - end.batteryRange) / RatedMilesPerKwh
-	// efficiency := kwh * 1000 / distance
+	eff := efficiency(start, end)
 	duration := end.at.Sub(start.at)
-	miles := (start.ratedBatteryRangeKm - end.ratedBatteryRangeKm) / KM_IN_MILE
-	text := fmt.Sprintf("🚗 %s->%s <code>%.1f</code> miles 🌡 %.1f°C\n🕗 %s→%s (%s)\n🔋 %d→%d%% (%d%%)\n🚘 %0.f→%.0f miles (%.1f miles)",
+	miles := (start.ratedBatteryRangeKm - end.ratedBatteryRangeKm) / KMPerMile
+	text := fmt.Sprintf("🚗 %s->%s <code>%.1f</code> miles 🌡 %.1f°C\n🕗 %s→%s (%s)\n🔋 %d→%d%% (%d%%)\n🚘 %0.f→%.0f miles (%.1f miles @ %.0fWh/mi)",
 		start.placeName(), end.placeName(), distance,
 		start.outsideTemp,
 		start.at.Format("15:04"), end.at.Format("15:04"), formatDuration(duration),
 		start.batteryLevel, end.batteryLevel, battery,
-		start.ratedBatteryRangeKm/KM_IN_MILE, end.ratedBatteryRangeKm/KM_IN_MILE, miles)
+		start.ratedBatteryRangeKm/KMPerMile, end.ratedBatteryRangeKm/KMPerMile, miles,
+		eff)
 	return text
 }
 
