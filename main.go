@@ -177,6 +177,8 @@ func clientOptions() *mqtt.ClientOptions {
 	return opts
 }
 
+const TimeFormat = "2006-01-02 15:04:05.000"
+
 func main() {
 	// discover cars
 	carUpdates := make(chan *Car, 1)
@@ -291,6 +293,22 @@ func main() {
 				msg := tgbotapi.NewMessage(chatId, text)
 				msg.ParseMode = "HTML"
 				bot.Send(msg)
+			}
+			if car.carState.geofence == "Home" {
+				power := car.carState.chargerActualCurrent * car.carState.chargerVoltage
+				event := map[string]interface{}{
+					"topic":     "power",
+					"device":    "power.zappi",
+					"power":     power,
+					"soc":       car.carState.batteryLevel,
+					"timestamp": time.Now().UTC().Format(TimeFormat),
+					"voltage":   car.carState.chargerVoltage,
+				}
+				payload, _ := json.Marshal(event)
+				token := client.Publish("gohome/power/power.zappi", 1, true, payload)
+				if token.Wait() && token.Error() != nil {
+					log.Println("Failed to publish message:", token.Error())
+				}
 			}
 		}
 	}
