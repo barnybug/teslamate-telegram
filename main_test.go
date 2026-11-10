@@ -14,7 +14,7 @@ func TestFinishChargingMessageHome(t *testing.T) {
 	end := CarState{at: endAt, chargerPower: 0, chargeEnergyAdded: 3.8, batteryLevel: 55}
 	peak := CarState{chargerPower: 8, chargeEnergyAdded: 1, batteryLevel: 52}
 	message := finishChargingMessage(start, end, peak)
-	assert.Equal(t, message, "🔌 Charging finished at Soul Buoy.\n🕗 06:39→08:09 (1h30m)\n🔋 50→55% (+ 5%)\n🚗 0→0 miles (+ 0.0 miles).\n⚡ + 3.8kWh\nAverage Power: 2.53kW (Peak 8kW at 52%)")
+	assert.Equal(t, "🔌 Charging finished at ?.\n🕗 06:39→08:09 (1h30m)\n🔋 50→55% (+ 5%)\n🚗 0→0 miles (+ 0.0 miles).\n⚡ + 3.8kWh\nAverage Power: 2.53kW (Peak 8kW at 52%)", message)
 }
 
 func TestFinishChargingMessageZero(t *testing.T) {
@@ -31,7 +31,7 @@ func TestFinishDriveMessage(t *testing.T) {
 	start := CarState{at: startAt, chargerPower: 7, chargeEnergyAdded: 0.0, batteryLevel: 50, odometer: 976, outsideTemp: 7.5, ratedBatteryRangeKm: 400, geofence: "Home"}
 	end := CarState{at: endAt, chargerPower: 0, chargeEnergyAdded: 3.8, batteryLevel: 48, odometer: 986, outsideTemp: 8.0, ratedBatteryRangeKm: 390, geofence: "", latitude: 52.3, longitude: 0.1}
 	message := finishDriveMessage(start, end)
-	assert.Equal(t, message, "🚗 Home->Cow Lane <code>6.2</code> miles 🌡 7.5°C\n🕗 06:39→06:47 (8m)\n🔋 50→48% (-2%)\n🚘 248→242 miles (6.2 miles @ 216Wh/mi)")
+	assert.Equal(t, "🚗 Home->Cow Lane <code>6.2</code> miles 🌡 7.5°C\n🕗 06:39→06:47 (8m)\n🔋 50→48% (-2%)\n🚘 248→242 miles (6.2 miles @ 216Wh/mi)", message)
 }
 
 func TestTruncate(t *testing.T) {

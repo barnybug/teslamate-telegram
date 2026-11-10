@@ -406,7 +406,13 @@ func nominatimLookup(latitude, longitude float32) (*LookupResult, error) {
 	query.Add("format", "jsonv2")
 	query.Add("addressdetails", "0")
 	uri := "https://nominatim.openstreetmap.org/reverse?" + query.Encode()
-	resp, err := http.Get(uri)
+	req, err := http.NewRequest("GET", uri, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("User-Agent", "gohome; https://github.com/barnybug/gohome")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
