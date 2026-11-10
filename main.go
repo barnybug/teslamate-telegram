@@ -20,24 +20,25 @@ const RatedKMPerKwh = 7.47
 const KMPerMile = 1.61
 
 type CarState struct {
-	at                   time.Time
-	geofence             string
-	chargerPower         int
-	chargerVoltage       int
-	timeToFullCharge     float32
-	chargerActualCurrent int
-	chargeEnergyAdded    float32
-	estBatteryRangeKm    float32
-	ratedBatteryRangeKm  float32
-	idealBatteryRangeKm  float32
-	batteryLevel         int
-	shiftState           string
-	odometer             float32
-	outsideTemp          float32
-	insideTemp           float32
-	pluggedIn            bool
-	latitude             float32
-	longitude            float32
+	at                     time.Time
+	geofence               string
+	chargerPower           int
+	chargerVoltage         int
+	timeToFullCharge       float32
+	chargerActualCurrent   int
+	chargeEnergyAdded      float32
+	estBatteryRangeKm      float32
+	ratedBatteryRangeKm    float32
+	idealBatteryRangeKm    float32
+	batteryLevel           int
+	shiftState             string
+	odometer               float32
+	outsideTemp            float32
+	insideTemp             float32
+	pluggedIn              bool
+	latitude               float32
+	longitude              float32
+	activeRouteDestination string
 }
 
 func truncate(s string, limit int) string {
@@ -96,6 +97,11 @@ func (car *Car) Update(key string, value string) {
 		car.carState.shiftState = value
 	case "geofence":
 		car.carState.geofence = value
+	case "active_route_destination":
+		if value == "nil" {
+			value = ""
+		}
+		car.carState.activeRouteDestination = value
 	case "charger_power":
 		if ivalue, err := strconv.Atoi(value); err == nil {
 			car.carState.chargerPower = ivalue
@@ -258,6 +264,7 @@ func main() {
 			}
 		case car := <-carUpdates:
 			log.Printf("State update: %+v", car.carState)
+			publishState(car, client)
 			if car.charging && car.carState.chargerPower == 0 {
 				log.Printf("Finished charging: %+v", car.carState)
 				car.charging = false
@@ -295,23 +302,46 @@ func main() {
 				bot.Send(msg)
 			}
 			if car.carState.geofence == "Home" {
-				power := car.carState.chargerActualCurrent * car.carState.chargerVoltage
-				event := map[string]interface{}{
-					"topic":     "power",
-					"device":    "power.zappi",
-					"power":     power,
-					"soc":       car.carState.batteryLevel,
-					"timestamp": time.Now().UTC().Format(TimeFormat),
-					"voltage":   car.carState.chargerVoltage,
-				}
-				payload, _ := json.Marshal(event)
-				token := client.Publish("gohome/power/power.zappi", 1, true, payload)
-				if token.Wait() && token.Error() != nil {
-					log.Println("Failed to publish message:", token.Error())
-				}
+				publishCharging(car, client)
 			}
 		}
 	}
+}
+
+func publishCharging(car *Car, client mqtt.Client) {
+	power := car.carState.chargerActualCurrent * car.carState.chargerVoltage
+	event := map[string]interface{}{
+		"topic":     "power",
+		"device":    "power.zappi",
+		"power":     power,
+		"soc":       car.carState.batteryLevel,
+		"timestamp": time.Now().UTC().Format(TimeFormat),
+		"voltage":   car.carState.chargerVoltage,
+	}
+	payload, _ := json.Marshal(event)
+	token := client.Publish("gohome/power/power.zappi", 1, true, payload)
+	if token.Wait() && token.Error() != nil {
+		log.Println("Failed to publish message:", token.Error())
+	}
+
+}
+
+func publishState(car *Car, client mqtt.Client) {
+	event := map[string]interface{}{
+		"topic":       "car",
+		"device":      "car.tesla",
+		"timestamp":   time.Now().UTC().Format(TimeFormat),
+		"location":    car.carState.geofence,
+		"latitude":    car.carState.latitude,
+		"longitude":   car.carState.longitude,
+		"destination": car.carState.activeRouteDestination,
+	}
+	payload, _ := json.Marshal(event)
+	token := client.Publish("gohome/car/car.tesla", 1, true, payload)
+	if token.Wait() && token.Error() != nil {
+		log.Println("Failed to publish message:", token.Error())
+	}
+
 }
 
 func formatDuration(d time.Duration) string {
